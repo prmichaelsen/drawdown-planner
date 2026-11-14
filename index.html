@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Withdrawal planner for an index fund portfolio: yearly withdrawals and remaining balance over time.">
+<meta name="description" content="Withdrawal planner for an index fund portfolio: monthly investing, then yearly withdrawals and remaining balance over time.">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
 <title>Index Fund Drawdown</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -20,17 +20,18 @@
   --balance: #1f5fb8;
   --balance-fill: rgba(31,95,184,.12);
   --draw: #0a8aa6;
+  --contrib: #5b8fd9;
   --warn: #c23b3b;
   --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-data: var(--font-body);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0b1520; --surface: #111e2c; --ink: #e2edf5; --muted: #8ea6b9; --line: #23364a;
-  --balance: #6aa8ff; --balance-fill: rgba(106,168,255,.15); --draw: #3cc8e2; --warn: #f07a7a;
+  --balance: #6aa8ff; --balance-fill: rgba(106,168,255,.15); --draw: #3cc8e2; --contrib: #4f7fc4; --warn: #f07a7a;
   color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #0b1520; --surface: #111e2c; --ink: #e2edf5; --muted: #8ea6b9; --line: #23364a;
-  --balance: #6aa8ff; --balance-fill: rgba(106,168,255,.15); --draw: #3cc8e2; --warn: #f07a7a;
+  --balance: #6aa8ff; --balance-fill: rgba(106,168,255,.15); --draw: #3cc8e2; --contrib: #4f7fc4; --warn: #f07a7a;
   color-scheme: dark }
 
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
@@ -123,18 +124,32 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
       <div class="ctl">
         <div class="ctl-head"><label for="bal">Portfolio today</label></div>
         <input id="bal" class="money" type="text" inputmode="numeric" autocomplete="off" value="2,500,000">
+        <input id="balR" type="range" min="0" max="10000000" step="10000" value="2500000" aria-label="Portfolio today slider">
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><label for="con">Monthly investment</label></div>
+        <input id="con" class="money" type="text" inputmode="numeric" autocomplete="off" value="0">
+        <input id="conR" type="range" min="0" max="20000" step="100" value="0" aria-label="Monthly investment slider">
+        <span class="hint">Added every month until withdrawals start.</span>
+      </div>
+
+      <div class="ctl">
+        <div class="ctl-head"><label for="sw">Start withdrawals</label><output id="swOut" for="sw"></output></div>
+        <input id="sw" type="range" min="0" max="40" step="1" value="0">
+        <span class="hint">Years of investing before living off the portfolio. 0 means start now.</span>
       </div>
 
       <div class="ctl">
         <div class="ctl-head"><label for="rate">Withdrawal rate</label><output id="rateOut" for="rate"></output></div>
         <input id="rate" type="range" min="0.5" max="12" step="0.1" value="4">
-        <span class="hint">Share of the portfolio taken out each year.</span>
+        <span class="hint">Share of the portfolio taken out in the first withdrawal year.</span>
       </div>
 
       <div class="ctl">
         <span class="ctl-head"><label>How withdrawals change</label></span>
         <div class="seg" role="group" aria-label="Withdrawal mode">
-          <button type="button" id="modeFixed" aria-pressed="true">Year-1 amount, raised with inflation</button>
+          <button type="button" id="modeFixed" aria-pressed="true">First-year amount, raised with inflation</button>
           <button type="button" id="modePct" aria-pressed="false">Same % of each year's balance</button>
         </div>
         <span class="hint" id="modeHint"></span>
@@ -153,7 +168,7 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
 
       <div class="ctl">
         <div class="ctl-head"><label for="yrs">Years to show</label><output id="yrsOut" for="yrs"></output></div>
-        <input id="yrs" type="range" min="5" max="60" step="1" value="40">
+        <input id="yrs" type="range" min="5" max="70" step="1" value="40">
       </div>
 
       <div class="ctl">
@@ -167,15 +182,15 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
 
     <section class="main">
       <div class="panel now">
-        <span class="eyebrow">Withdrawal value right now</span>
+        <span class="eyebrow" id="nowLbl">Withdrawal value right now</span>
         <div class="big" id="nowYear"></div>
         <p id="nowLine"></p>
       </div>
 
       <div class="stats">
+        <div class="stat"><span class="eyebrow" id="sStartLbl">Balance at first withdrawal</span><b id="sStart"></b></div>
         <div class="stat"><span class="eyebrow">Total withdrawn</span><b id="sTotal"></b></div>
         <div class="stat"><span class="eyebrow" id="sEndLbl">Balance at end</span><b id="sEnd"></b></div>
-        <div class="stat" id="sLastBox"><span class="eyebrow">Final-year withdrawal</span><b id="sLast"></b></div>
         <div class="stat" id="sRunBox"><span class="eyebrow">Money lasts</span><b id="sRun"></b></div>
       </div>
 
@@ -183,11 +198,12 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
         <div class="chart-head">
           <h2>Year by year</h2>
           <div class="legend">
+            <span class="key" id="keyCon"><span class="sw" style="background:var(--contrib)"></span>Yearly investment (right scale)</span>
             <span class="key"><span class="sw" style="background:var(--draw)"></span>Yearly withdrawal (right scale)</span>
-            <span class="key"><span class="sw" style="background:var(--balance)"></span>Remaining investments (left scale)</span>
+            <span class="key"><span class="sw" style="background:var(--balance)"></span>Invested balance (left scale)</span>
           </div>
         </div>
-        <div class="chart-box"><svg id="chart" viewBox="0 0 760 360" role="img" aria-label="Yearly withdrawals and remaining balance"></svg></div>
+        <div class="chart-box"><svg id="chart" viewBox="0 0 760 360" role="img" aria-label="Yearly investments, withdrawals and invested balance"></svg></div>
         <div class="readout" id="readout">Hover or tap a year for details.</div>
       </div>
 
@@ -198,21 +214,21 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     </section>
   </div>
 
-  <p class="foot">Assumes a steady return every year, withdrawals taken at the start of each year, and no taxes or fund fees. Real markets vary year to year, and a few bad years early on can drain a portfolio faster than this shows. This is an estimate, not financial advice.</p>
+  <p class="foot">Assumes a steady return every year, monthly investments compounding monthly, withdrawals taken at the start of each year, and no taxes or fund fees. Real markets vary year to year, and a few bad years early on can drain a portfolio faster than this shows. This is an estimate, not financial advice.</p>
 </div>
 
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const S = { mode: "fixed", basis: "nom" };
-  const KEY = "drawdown-v1";
+  const KEY = "drawdown-v2";
+  const FIELDS = ["bal","con","sw","rate","ret","inf","yrs"];
   try { const s = JSON.parse(localStorage.getItem(KEY) || "null");
-    if (s) { for (const k of ["bal","rate","ret","inf","yrs"]) if (s[k] != null) $(k).value = s[k];
+    if (s) { for (const k of FIELDS) if (s[k] != null) $(k).value = s[k];
       if (s.mode) S.mode = s.mode; if (s.basis) S.basis = s.basis; } } catch (e) {}
 
   function digits(v) { return +String(v).replace(/\D/g, "") || 0; }
   function commas(v) { const d = String(v).replace(/\D/g, "").replace(/^0+(?=\d)/, ""); return d ? (+d).toLocaleString("en-US") : ""; }
-  $("bal").value = commas($("bal").value);
   const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
   const short = v => { const a = Math.abs(v);
     if (a >= 1e9) return "$" + (v/1e9).toFixed(a >= 1e10 ? 0 : 1) + "B";
@@ -220,39 +236,68 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     if (a >= 1e3) return "$" + Math.round(v/1e3) + "k";
     return "$" + Math.round(v); };
 
+  // Money field + slider pairs: typing reformats with commas and moves the slider; the slider rewrites the field.
+  function pair(id) {
+    const box = $(id), sl = $(id + "R");
+    box.value = commas(box.value) || "0";
+    sl.value = Math.min(+sl.max, digits(box.value));
+    box.addEventListener("input", () => {
+      const caret = box.selectionStart ?? box.value.length;
+      const before = box.value.slice(0, caret).replace(/\D/g, "").length;
+      box.value = commas(box.value);
+      let pos = 0, seen = 0;
+      while (pos < box.value.length && seen < before) { if (/\d/.test(box.value[pos])) seen++; pos++; }
+      try { box.setSelectionRange(pos, pos); } catch (err) {}
+      sl.value = Math.min(+sl.max, digits(box.value));
+      render(); });
+    box.addEventListener("blur", () => { if (!box.value) { box.value = "0"; render(); } });
+    sl.addEventListener("input", () => { box.value = commas(sl.value) || "0"; render(); });
+  }
+
   function simulate(p) {
-    const rows = []; let B = p.bal; const w1 = p.bal * p.rate; let depleted = null;
+    const rows = []; let B = p.bal, w1 = null, startBal = null, depleted = null, wy = 0;
+    const rm = Math.pow(1 + p.ret, 1/12) - 1;
+    const conYear = p.con * (rm > 0 ? (Math.pow(1 + rm, 12) - 1) / rm : 12);
     for (let t = 1; t <= p.yrs; t++) {
-      const start = B;
-      let w = p.mode === "fixed" ? w1 * Math.pow(1 + p.inf, t - 1) : B * p.rate;
-      if (w > B) w = B;
-      B = (B - w) * (1 + p.ret);
-      if (B < 1) B = 0;
-      if (B === 0 && depleted === null) depleted = t;
-      const d = Math.pow(1 + p.inf, t - 1);
-      rows.push({ t, start, w, end: B, d });
+      const start = B, d = Math.pow(1 + p.inf, t - 1);
+      let w = 0, c = 0;
+      if (t <= p.sw) {
+        c = p.con * 12;
+        B = B * (1 + p.ret) + conYear;
+      } else {
+        wy++;
+        if (w1 === null) { w1 = B * p.rate; startBal = B; }
+        w = p.mode === "fixed" ? w1 * Math.pow(1 + p.inf, wy - 1) : B * p.rate;
+        if (w > B) w = B;
+        B = (B - w) * (1 + p.ret);
+        if (B < 1) B = 0;
+        if (B === 0 && depleted === null) depleted = t;
+      }
+      rows.push({ t, start, c, w, end: B, d });
     }
-    return { rows, depleted, w1 };
+    if (w1 === null) { startBal = B; w1 = B * p.rate; }
+    return { rows, depleted, w1, startBal };
   }
 
   function read() {
-    return { bal: digits($("bal").value), rate: +$("rate").value / 100, ret: +$("ret").value / 100,
+    return { bal: digits($("bal").value), con: digits($("con").value), sw: +$("sw").value,
+      rate: +$("rate").value / 100, ret: +$("ret").value / 100,
       inf: +$("inf").value / 100, yrs: +$("yrs").value, mode: S.mode };
   }
 
   function niceMax(v) { if (v <= 0) return 1; const e = Math.pow(10, Math.floor(Math.log10(v)));
     for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * e >= v) return m * e; return 10 * e; }
 
-  function draw(rows, real) {
+  function draw(rows, real, inf) {
     const svg = $("chart");
     const W = Math.max(300, Math.round(svg.parentElement.clientWidth || 760));
     const small = W < 520, H = small ? 250 : 360, L = small ? 46 : 64, R = small ? 46 : 64, T = 16, Bm = 34;
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
     svg.style.setProperty("--fs", small ? "10px" : "11px");
     const iw = W - L - R, ih = H - T - Bm, n = rows.length;
-    const val = (r, k) => real ? r[k] / r.d : r[k];
-    const balMax = niceMax(Math.max(...rows.map(r => val(r, "start")), 1));
-    const wMax = niceMax(Math.max(...rows.map(r => val(r, "w")), 1));
+    const dv = r => real ? r.d : 1, endOf = r => real ? r.end / (r.d * (1 + inf)) : r.end;
+    const balMax = niceMax(Math.max(...rows.map(r => r.start / dv(r)), ...rows.map(endOf), 1));
+    const wMax = niceMax(Math.max(...rows.map(r => Math.max(r.w, r.c) / dv(r)), 1));
     const x = i => L + (i + 0.5) * iw / n, bw = Math.max(2, iw / n * 0.62);
     const yB = v => T + ih - v / balMax * ih, yW = v => T + ih - v / wMax * ih;
     let s = "";
@@ -265,29 +310,34 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     rows.forEach((r, i) => { if (r.t === 1 || r.t % step === 0)
       s += `<text x="${x(i)}" y="${H-12}" text-anchor="middle">${r.t}</text>`; });
     s += `<text x="${W-R}" y="${H-0.5}" text-anchor="end" font-size="10">year</text>`;
-    rows.forEach((r, i) => { const v = val(r, "w"), y = yW(v);
-      s += `<rect class="bar" x="${x(i)-bw/2}" y="${y}" width="${bw}" height="${T+ih-y}" fill="var(--draw)" opacity=".6"/>`; });
-    // balance after withdrawal and growth, plotted at end of each year, starting from year-0 balance
-    const pts = [[L, yB(val(rows[0], "start"))]].concat(rows.map((r, i) => [L + (i + 1) * iw / n, yB(real ? r.end / (r.d * (1 + read().inf)) : r.end)]));
-    const path = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+    rows.forEach((r, i) => {
+      const v = (r.w || r.c) / dv(r); if (!v) return; const y = yW(v);
+      s += `<rect x="${x(i)-bw/2}" y="${y}" width="${bw}" height="${T+ih-y}" fill="${r.w ? "var(--draw)" : "var(--contrib)"}" opacity=".6"/>`; });
+    const pts = [[L, yB(rows[0].start)]].concat(rows.map((r, i) => [L + (i + 1) * iw / n, yB(endOf(r))]));
+    const path = pts.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join(" ");
     s += `<path d="${path} L ${pts[pts.length-1][0]} ${T+ih} L ${L} ${T+ih} Z" fill="var(--balance-fill)"/>`;
-    s += `<path class="bal-line" d="${path}" fill="none" stroke="var(--balance)" stroke-width="2.5" stroke-linejoin="round"/>`;
+    s += `<path d="${path}" fill="none" stroke="var(--balance)" stroke-width="2.5" stroke-linejoin="round"/>`;
     const last = pts[pts.length-1];
     s += `<circle cx="${last[0]}" cy="${last[1]}" r="4" fill="var(--balance)"/>`;
     s += `<line id="hov" x1="0" x2="0" y1="${T}" y2="${T+ih}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
     rows.forEach((r, i) => { s += `<rect data-i="${i}" x="${L + i*iw/n}" y="${T}" width="${iw/n}" height="${ih}" fill="transparent"/>`; });
     svg.innerHTML = s;
     svg.querySelectorAll("rect[data-i]").forEach(el => {
-      const show = () => { const i = +el.dataset.i, r = rows[i], dv = real ? r.d : 1;
+      const show = () => { const i = +el.dataset.i, r = rows[i], d = dv(r);
         const hov = $("hov"); hov.setAttribute("x1", x(i)); hov.setAttribute("x2", x(i)); hov.setAttribute("visibility", "visible");
-        const endV = real ? r.end / (r.d * (1 + read().inf)) : r.end;
-        $("readout").innerHTML = `Year <b>${r.t}</b> · withdraw <b>${usd0.format(r.w/dv)}</b> (${usd0.format(r.w/dv/12)}/mo) · invested after withdrawal and growth <b>${usd0.format(endV)}</b>`; };
+        const act = r.w ? `withdraw <b>${usd0.format(r.w/d)}</b> (${usd0.format(r.w/d/12)}/mo)`
+          : r.c ? `invest <b>${usd0.format(r.c/d)}</b> (${usd0.format(r.c/12/d)}/mo)` : "no withdrawal yet";
+        $("readout").innerHTML = `Year <b>${r.t}</b> · ${act} · balance at year end <b>${usd0.format(endOf(r))}</b>`; };
       el.addEventListener("mouseenter", show); el.addEventListener("click", show); });
     svg.addEventListener("mouseleave", () => { const h = $("hov"); if (h) h.setAttribute("visibility", "hidden"); });
   }
 
   function render() {
     const p = read(); const real = S.basis === "real";
+    $("sw").max = p.yrs;
+    if (+$("sw").value > p.yrs) $("sw").value = p.yrs;
+    p.sw = +$("sw").value;
+    $("swOut").textContent = p.sw === 0 ? "now" : `after ${p.sw} yr${p.sw > 1 ? "s" : ""}`;
     $("rateOut").textContent = (p.rate*100).toFixed(1) + "%";
     $("retOut").textContent = (p.ret*100).toFixed(1) + "%";
     $("infOut").textContent = (p.inf*100).toFixed(1) + "%";
@@ -299,46 +349,55 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     $("modeHint").textContent = S.mode === "fixed"
       ? "Classic “4% rule” style: steady income that keeps pace with prices; the balance absorbs the swings."
       : "Income rises and falls with the balance, so the money never fully runs out.";
+    $("keyCon").hidden = !(p.con > 0 && p.sw > 0);
 
-    const { rows, depleted, w1 } = simulate(p);
-    $("nowYear").textContent = usd0.format(w1) + " / yr";
-    $("nowLine").textContent = `${(p.rate*100).toFixed(1)}% of ${usd0.format(p.bal)} is ${usd0.format(w1/12)} a month, or ${usd0.format(w1/52)} a week, before taxes.`;
+    const { rows, depleted, w1, startBal } = simulate(p);
+    const dS = Math.pow(1 + p.inf, p.sw);
+    const rate = (p.rate*100).toFixed(1) + "%";
+    if (p.sw === 0) {
+      $("nowLbl").textContent = "Withdrawal value right now";
+      $("nowYear").textContent = usd0.format(w1) + " / yr";
+      $("nowLine").textContent = `${rate} of ${usd0.format(p.bal)} is ${usd0.format(w1/12)} a month, or ${usd0.format(w1/52)} a week, before taxes.`;
+    } else {
+      const shown = real ? w1 / dS : w1;
+      $("nowLbl").textContent = `First withdrawal, year ${p.sw + 1}` + (real ? " (today's dollars)" : "");
+      $("nowYear").textContent = usd0.format(shown) + " / yr";
+      $("nowLine").textContent = (p.con > 0 ? `Investing ${usd0.format(p.con)} a month for ${p.sw} years` : `Leaving it invested for ${p.sw} years`)
+        + ` grows ${usd0.format(p.bal)} to ${usd0.format(startBal)}. ${rate} of that is ${usd0.format(w1/12)} a month, about ${usd0.format(w1/dS)} a year in today's dollars. Before taxes.`;
+    }
 
     const dv = r => real ? r.d : 1;
     const total = rows.reduce((a, r) => a + r.w / dv(r), 0);
     const lastR = rows[rows.length-1];
     const endV = real ? lastR.end / (lastR.d * (1 + p.inf)) : lastR.end;
+    $("sStartLbl").textContent = p.sw === 0 ? "Balance today" : `Balance after year ${p.sw}`;
+    $("sStart").textContent = short(real ? startBal / dS : startBal);
     $("sTotal").textContent = short(total);
     $("sEndLbl").textContent = `Balance after year ${p.yrs}`;
     $("sEnd").textContent = short(endV);
-    $("sLast").textContent = usd0.format(lastR.w / dv(lastR));
-    $("sRun").textContent = depleted ? `${depleted} years` : `${p.yrs}+ years`;
+    const wYears = p.yrs - p.sw;
+    $("sRun").textContent = depleted ? `${depleted - p.sw} years` : wYears > 0 ? `${wYears}+ years` : "not started";
     $("sRunBox").classList.toggle("bad", !!depleted);
-    $("mbar").innerHTML = `<span><b>${usd0.format(w1)}</b>/yr · ${usd0.format(w1/12)}/mo</span>`
-      + `<span class="${depleted ? "bad" : ""}">${depleted ? "runs out yr " + depleted : "lasts " + p.yrs + "+ yrs"}</span>`;
     $("sEnd").parentElement.classList.toggle("bad", endV === 0);
+    const mW = real ? w1 / dS : w1;
+    $("mbar").innerHTML = `<span><b>${usd0.format(mW)}</b>/yr · ${usd0.format(mW/12)}/mo${p.sw ? ` from yr ${p.sw + 1}` : ""}</span>`
+      + `<span class="${depleted ? "bad" : ""}">${depleted ? "runs out yr " + depleted : wYears > 0 ? "lasts " + wYears + "+ yrs" : "no withdrawals shown"}</span>`;
 
-    draw(rows, real);
+    draw(rows, real, p.inf);
     $("readout").textContent = "Hover or tap a year for details.";
 
-    let h = `<thead><tr><th>Year</th><th>Start balance</th><th>Withdrawal</th><th>Per month</th><th>End balance</th></tr></thead><tbody>`;
+    const showC = p.con > 0 && p.sw > 0;
+    let h = `<thead><tr><th>Year</th><th>Start balance</th>${showC ? "<th>Invested</th>" : ""}<th>Withdrawal</th><th>Per month</th><th>End balance</th></tr></thead><tbody>`;
     rows.forEach(r => { const d = dv(r), e = real ? r.end / (r.d * (1 + p.inf)) : r.end;
-      h += `<tr><td>${r.t}</td><td>${usd0.format(r.start/d)}</td><td>${usd0.format(r.w/d)}</td><td>${usd0.format(r.w/d/12)}</td><td>${usd0.format(e)}</td></tr>`; });
+      h += `<tr><td>${r.t}</td><td>${usd0.format(r.start/d)}</td>${showC ? `<td>${usd0.format(r.c/d)}</td>` : ""}<td>${usd0.format(r.w/d)}</td><td>${usd0.format(r.w/d/12)}</td><td>${usd0.format(e)}</td></tr>`; });
     $("tbl").innerHTML = h + "</tbody>";
 
-    try { localStorage.setItem(KEY, JSON.stringify({ bal: $("bal").value, rate: $("rate").value, ret: $("ret").value,
-      inf: $("inf").value, yrs: $("yrs").value, mode: S.mode, basis: S.basis })); } catch (e) {}
+    try { const o = { mode: S.mode, basis: S.basis }; for (const k of FIELDS) o[k] = $(k).value;
+      localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {}
   }
 
-  ["rate","ret","inf","yrs"].forEach(id => $(id).addEventListener("input", render));
-  $("bal").addEventListener("input", e => {
-    const el = e.target, caret = el.selectionStart ?? el.value.length;
-    const before = el.value.slice(0, caret).replace(/\D/g, "").length;
-    el.value = commas(el.value);
-    let pos = 0, seen = 0;
-    while (pos < el.value.length && seen < before) { if (/\d/.test(el.value[pos])) seen++; pos++; }
-    try { el.setSelectionRange(pos, pos); } catch (err) {}
-    render(); });
+  pair("bal"); pair("con");
+  ["sw","rate","ret","inf","yrs"].forEach(id => $(id).addEventListener("input", render));
   $("modeFixed").onclick = () => { S.mode = "fixed"; render(); };
   $("modePct").onclick = () => { S.mode = "pct"; render(); };
   $("basisNom").onclick = () => { S.basis = "nom"; render(); };

@@ -1,9 +1,10 @@
 # Index Fund Drawdown
 
-A single-page planner for withdrawing from an index fund portfolio.
-Set the starting balance, withdrawal rate, annual return, inflation
-and time horizon; the page shows the withdrawal's value today and a
-year-by-year chart of withdrawals and the remaining balance.
+A single-page planner for investing in and then withdrawing from an
+index fund portfolio. Set the starting balance, a monthly investment,
+the year withdrawals start, the withdrawal rate, annual return,
+inflation and time horizon; the page shows the first withdrawal and a
+year-by-year chart of investments, withdrawals and the balance.
 
 Live: https://prmichaelsen.github.io/drawdown-planner/
 
