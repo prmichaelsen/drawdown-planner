@@ -126,14 +126,14 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
       <div class="ctl">
         <div class="ctl-head"><label for="bal">Portfolio today</label></div>
         <input id="bal" class="money" type="text" inputmode="numeric" autocomplete="off" value="2,500,000">
-        <input id="balR" type="range" min="0" max="10000000" step="10000" value="2500000" aria-label="Portfolio today slider">
+        <input id="balR" type="range" min="0" max="1000" step="1" value="0" data-lo="1000" data-hi="20000000" aria-label="Portfolio today slider">
       </div>
 
       <div class="ctl">
         <div class="ctl-head"><label for="con">Monthly investment</label></div>
         <input id="con" class="money" type="text" inputmode="numeric" autocomplete="off" value="0">
-        <input id="conR" type="range" min="0" max="20000" step="100" value="0" aria-label="Monthly investment slider">
-        <span class="hint">Added every month until withdrawals start.</span>
+        <input id="conR" type="range" min="0" max="1000" step="1" value="0" data-lo="50" data-hi="25000" aria-label="Monthly investment slider">
+        <span class="hint">Added every month until withdrawals start. The sliders move in finer steps at small amounts; type any exact figure in the box.</span>
       </div>
 
       <div class="ctl">
@@ -238,11 +238,20 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     if (a >= 1e3) return "$" + Math.round(v/1e3) + "k";
     return "$" + Math.round(v); };
 
+  // Money sliders use a log scale: the far left is $0, then lo..hi spread evenly by magnitude,
+  // so small amounts get fine control and large ones move in bigger, rounded steps.
+  function nice(v) { if (v < 10) return Math.round(v); const step = Math.pow(10, Math.floor(Math.log10(v)) - 1);
+    return Math.round(v / step) * step; }
+  function toVal(sl) { const pos = +sl.value; if (pos <= 0) return 0;
+    const lo = +sl.dataset.lo, hi = +sl.dataset.hi; return nice(lo * Math.pow(hi / lo, pos / +sl.max)); }
+  function toPos(sl, v) { if (v <= 0) return 0; const lo = +sl.dataset.lo, hi = +sl.dataset.hi;
+    if (v <= lo) return 1; return Math.min(+sl.max, Math.round(+sl.max * Math.log(v / lo) / Math.log(hi / lo))); }
+
   // Money field + slider pairs: typing reformats with commas and moves the slider; the slider rewrites the field.
   function pair(id) {
     const box = $(id), sl = $(id + "R");
     box.value = commas(box.value) || "0";
-    sl.value = Math.min(+sl.max, digits(box.value));
+    sl.value = toPos(sl, digits(box.value));
     box.addEventListener("input", () => {
       const caret = box.selectionStart ?? box.value.length;
       const before = box.value.slice(0, caret).replace(/\D/g, "").length;
@@ -250,10 +259,10 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
       let pos = 0, seen = 0;
       while (pos < box.value.length && seen < before) { if (/\d/.test(box.value[pos])) seen++; pos++; }
       try { box.setSelectionRange(pos, pos); } catch (err) {}
-      sl.value = Math.min(+sl.max, digits(box.value));
+      sl.value = toPos(sl, digits(box.value));
       render(); });
     box.addEventListener("blur", () => { if (!box.value) { box.value = "0"; render(); } });
-    sl.addEventListener("input", () => { box.value = commas(sl.value) || "0"; render(); });
+    sl.addEventListener("input", () => { box.value = commas(toVal(sl)) || "0"; render(); });
   }
 
   function simulate(p) {
