@@ -10,6 +10,18 @@ Live: https://prmichaelsen.github.io/drawdown-planner/
 
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-prmichaelsen-1f5fb8?logo=buymeacoffee&logoColor=white)](https://buymeacoffee.com/prmichaelsen)
 
+Three ways to model market returns:
+
+- **Steady**: the same return and inflation every year.
+- **Historical**: replays every complete stretch of actual years since
+  1928 and reports how often the money lasted, plus the worst start year.
+- **Monte Carlo**: 1,000 random sequences drawn from those same years.
+
+Historical data: yearly S&P 500 total returns, 10-year Treasury returns
+and CPI inflation, 1928–2025, from
+[Aswath Damodaran, NYU Stern](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/histret.html).
+A stocks/bonds slider sets the mix for the historical modes.
+
 Two withdrawal modes:
 
 - **First-year amount, raised with inflation** (the "4% rule" style).

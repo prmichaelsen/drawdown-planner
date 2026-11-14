@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Withdrawal planner for an index fund portfolio: monthly investing, then yearly withdrawals and remaining balance over time.">
+<meta name="description" content="Withdrawal planner for an index fund portfolio: steady, historical and Monte Carlo returns, monthly investing, then yearly withdrawals.">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
 <title>Index Fund Drawdown</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -34,6 +34,7 @@
   --balance: #6aa8ff; --balance-fill: rgba(106,168,255,.15); --draw: #3cc8e2; --contrib: #4f7fc4; --warn: #f07a7a;
   color-scheme: dark }
 
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
 .wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 48px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
@@ -59,6 +60,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--balance); o
 .seg button { font: 500 .82rem var(--font-body); color: var(--muted); background: transparent; border: 0; padding: 8px 6px; cursor: pointer; line-height: 1.25; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button[aria-pressed="true"] { background: var(--balance); color: var(--surface); }
+.seg.seg3 { grid-template-columns: repeat(3, 1fr); }
+.stat.good b { color: var(--balance); }
 
 .main { display: grid; gap: 20px; min-width: 0; }
 .main > * { min-width: 0; max-width: 100%; }
@@ -172,12 +175,28 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
       </div>
 
       <div class="ctl">
+        <span class="ctl-head"><label>Market returns</label></span>
+        <div class="seg seg3" role="group" aria-label="Market returns">
+          <button type="button" id="rmSteady" aria-pressed="true">Steady</button>
+          <button type="button" id="rmHist" aria-pressed="false">Historical</button>
+          <button type="button" id="rmMC" aria-pressed="false">Monte Carlo</button>
+        </div>
+        <span class="hint" id="rmHint"></span>
+      </div>
+
+      <div class="ctl" id="stkCtl" hidden>
+        <div class="ctl-head"><label for="stk">Stocks</label><output id="stkOut" for="stk"></output></div>
+        <input id="stk" type="range" min="0" max="100" step="5" value="100">
+        <span class="hint">S&amp;P 500 with dividends; the rest in 10-year US Treasury bonds, rebalanced yearly.</span>
+      </div>
+
+      <div class="ctl" id="retCtl">
         <div class="ctl-head"><label for="ret">Annual return</label><output id="retOut" for="ret"></output></div>
         <input id="ret" type="range" min="0" max="12" step="0.1" value="7">
         <span class="hint">Nominal, before inflation. US stock index long-run average is roughly 10%; 6–7% is a common planning figure.</span>
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="infCtl">
         <div class="ctl-head"><label for="inf">Inflation</label><output id="infOut" for="inf"></output></div>
         <input id="inf" type="range" min="0" max="8" step="0.1" value="3">
       </div>
@@ -187,7 +206,7 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
         <input id="yrs" type="range" min="5" max="70" step="1" value="40">
       </div>
 
-      <div class="ctl">
+      <div class="ctl" id="basisCtl">
         <span class="ctl-head"><label>Show amounts in</label></span>
         <div class="seg" role="group" aria-label="Dollar basis">
           <button type="button" id="basisNom" aria-pressed="true">Future dollars</button>
@@ -205,18 +224,24 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
 
       <div class="stats">
         <div class="stat"><span class="eyebrow" id="sStartLbl">Balance at first withdrawal</span><b id="sStart"></b></div>
-        <div class="stat"><span class="eyebrow">Total withdrawn</span><b id="sTotal"></b></div>
+        <div class="stat" id="sTotalBox"><span class="eyebrow" id="sTotalLbl">Total withdrawn</span><b id="sTotal"></b></div>
         <div class="stat"><span class="eyebrow" id="sEndLbl">Balance at end</span><b id="sEnd"></b></div>
-        <div class="stat" id="sRunBox"><span class="eyebrow">Money lasts</span><b id="sRun"></b></div>
+        <div class="stat" id="sRunBox"><span class="eyebrow" id="sRunLbl">Money lasts</span><b id="sRun"></b></div>
       </div>
 
       <div class="panel">
         <div class="chart-head">
           <h2>Year by year</h2>
-          <div class="legend">
+          <div class="legend" id="legSteady">
             <span class="key" id="keyCon"><span class="sw" style="background:var(--contrib)"></span>Yearly investment (right scale)</span>
             <span class="key"><span class="sw" style="background:var(--draw)"></span>Yearly withdrawal (right scale)</span>
             <span class="key"><span class="sw" style="background:var(--balance)"></span>Invested balance (left scale)</span>
+          </div>
+          <div class="legend" id="legRand" hidden>
+            <span class="key"><span class="sw" style="background:var(--draw)"></span>Median withdrawal (right)</span>
+            <span class="key"><span class="sw" style="background:var(--balance-fill);border:1px solid var(--balance)"></span>10th–90th percentile balance (left)</span>
+            <span class="key"><span class="sw" style="background:var(--balance)"></span>Median balance</span>
+            <span class="key" id="keyWorst"><span class="sw" style="background:var(--warn)"></span><span id="keyWorstTxt">Worst start</span></span>
           </div>
         </div>
         <div class="chart-box"><svg id="chart" viewBox="0 0 760 360" role="img" aria-label="Yearly investments, withdrawals and invested balance"></svg></div>
@@ -230,7 +255,8 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     </section>
   </div>
 
-  <p class="foot">Assumes a steady return every year, monthly investments compounding monthly, withdrawals taken at the start of each year, and no taxes or fund fees. Real markets vary year to year, and a few bad years early on can drain a portfolio faster than this shows. This is an estimate, not financial advice.</p>
+  <p class="foot" id="footSteady">Assumes a steady return every year, monthly investments compounding monthly, withdrawals taken at the start of each year, and no taxes or fund fees. Real markets vary year to year, and a few bad years early on can drain a portfolio faster than this shows. This is an estimate, not financial advice.</p>
+  <p class="foot" id="footRand" hidden>Historical and Monte Carlo modes use actual yearly S&amp;P 500 total returns, 10-year Treasury bond returns and CPI inflation for 1928–2025, from <a href="https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/histret.html" target="_blank" rel="noopener">Aswath Damodaran, NYU Stern</a>. Historical runs every complete stretch of years in that record; Monte Carlo draws 1,000 random sequences of whole years from it. All amounts are in today's dollars; withdrawals and monthly investments keep pace with inflation. No taxes or fund fees. Past returns don't guarantee future ones. This is an estimate, not financial advice.</p>
 
   <footer class="site-foot">
     <a id="bmcLink" href="https://buymeacoffee.com/prmichaelsen" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13v5a6 6 0 0 1-6 6H10a6 6 0 0 1-6-6V8Zm13 1h1.5a2.5 2.5 0 0 1 0 5H17v-1.6h1.5a.9.9 0 0 0 0-1.8H17V9ZM7 3.5c.6.7.6 1.5 0 2.2M10.5 3.5c.6.7.6 1.5 0 2.2M14 3.5c.6.7.6 1.5 0 2.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>Buy me a coffee</a>
@@ -247,12 +273,12 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const S = { mode: "fixed", basis: "nom" };
+  const S = { mode: "fixed", basis: "nom", rm: "steady" };
   const KEY = "drawdown-v2";
-  const FIELDS = ["bal","con","sw","rate","ret","inf","yrs"];
+  const FIELDS = ["bal","con","sw","rate","ret","inf","yrs","stk"];
   try { const s = JSON.parse(localStorage.getItem(KEY) || "null");
     if (s) { for (const k of FIELDS) if (s[k] != null) $(k).value = s[k];
-      if (s.mode) S.mode = s.mode; if (s.basis) S.basis = s.basis; } } catch (e) {}
+      if (s.mode) S.mode = s.mode; if (s.basis) S.basis = s.basis; if (s.rm) S.rm = s.rm; } } catch (e) {}
 
   function digits(v) { return +String(v).replace(/\D/g, "") || 0; }
   function commas(v) { const d = String(v).replace(/\D/g, "").replace(/^0+(?=\d)/, ""); return d ? (+d).toLocaleString("en-US") : ""; }
@@ -318,7 +344,7 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
   function read() {
     return { bal: digits($("bal").value), con: digits($("con").value), sw: +$("sw").value,
       rate: +$("rate").value / 100, ret: +$("ret").value / 100,
-      inf: +$("inf").value / 100, yrs: +$("yrs").value, mode: S.mode };
+      inf: +$("inf").value / 100, yrs: +$("yrs").value, stk: +$("stk").value / 100, mode: S.mode };
   }
 
   function niceMax(v) { if (v <= 0) return 1; const e = Math.pow(10, Math.floor(Math.log10(v)));
@@ -368,6 +394,140 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     svg.addEventListener("mouseleave", () => { const h = $("hov"); if (h) h.setAttribute("visibility", "hidden"); });
   }
 
+  // [year, S&P 500 total return, 10-yr Treasury return, CPI inflation], 1928–2025. Source: Damodaran, NYU Stern (histretSP.xls).
+  const HIST = [[1928,0.4381,0.0084,-0.0116],[1929,-0.083,0.042,0.0058],[1930,-0.2512,0.0454,-0.064],[1931,-0.4384,-0.0256,-0.0932],[1932,-0.0864,0.0879,-0.1027],[1933,0.4998,0.0186,0.0076],[1934,-0.0119,0.0796,0.0152],[1935,0.4674,0.0447,0.0299],[1936,0.3194,0.0502,0.0145],[1937,-0.3534,0.0138,0.0286],[1938,0.2928,0.0421,-0.0278],[1939,-0.011,0.0441,0.0],[1940,-0.1067,0.054,0.0071],[1941,-0.1277,-0.0202,0.0993],[1942,0.1917,0.0229,0.0903],[1943,0.2506,0.0249,0.0296],[1944,0.1903,0.0258,0.023],[1945,0.3582,0.038,0.0225],[1946,-0.0843,0.0313,0.1813],[1947,0.052,0.0092,0.0884],[1948,0.057,0.0195,0.0273],[1949,0.183,0.0466,-0.0183],[1950,0.3081,0.0043,0.058],[1951,0.2368,-0.003,0.0596],[1952,0.1815,0.0227,0.0091],[1953,-0.0121,0.0414,0.006],[1954,0.5256,0.0329,-0.0037],[1955,0.326,-0.0134,0.0037],[1956,0.0744,-0.0226,0.0283],[1957,-0.1046,0.068,0.0304],[1958,0.4372,-0.021,0.0176],[1959,0.1206,-0.0265,0.0152],[1960,0.0034,0.1164,0.0136],[1961,0.2664,0.0206,0.0067],[1962,-0.0881,0.0569,0.0123],[1963,0.2261,0.0168,0.0165],[1964,0.1642,0.0373,0.012],[1965,0.124,0.0072,0.0192],[1966,-0.0997,0.0291,0.0336],[1967,0.238,-0.0158,0.0328],[1968,0.1081,0.0327,0.0471],[1969,-0.0824,-0.0501,0.059],[1970,0.0356,0.1675,0.0557],[1971,0.1422,0.0979,0.0327],[1972,0.1876,0.0282,0.0341],[1973,-0.1431,0.0366,0.0894],[1974,-0.259,0.0199,0.121],[1975,0.37,0.0361,0.0713],[1976,0.2383,0.1598,0.0504],[1977,-0.0698,0.0129,0.0668],[1978,0.0651,-0.0078,0.0899],[1979,0.1852,0.0067,0.1325],[1980,0.3174,-0.0299,0.1235],[1981,-0.047,0.082,0.0891],[1982,0.2042,0.3281,0.0383],[1983,0.2234,0.032,0.0379],[1984,0.0615,0.1373,0.0404],[1985,0.3124,0.2571,0.0379],[1986,0.1849,0.2428,0.0119],[1987,0.0581,-0.0496,0.0433],[1988,0.1654,0.0822,0.0441],[1989,0.3148,0.1769,0.0464],[1990,-0.0306,0.0624,0.0625],[1991,0.3023,0.15,0.0298],[1992,0.0749,0.0936,0.0297],[1993,0.0997,0.1421,0.0281],[1994,0.0133,-0.0804,0.026],[1995,0.372,0.2348,0.0253],[1996,0.2268,0.0143,0.0338],[1997,0.331,0.0994,0.017],[1998,0.2834,0.1492,0.0161],[1999,0.2089,-0.0825,0.0268],[2000,-0.0903,0.1666,0.0344],[2001,-0.1185,0.0557,0.016],[2002,-0.2197,0.1512,0.0248],[2003,0.2836,0.0038,0.0204],[2004,0.1074,0.0449,0.0334],[2005,0.0483,0.0287,0.0334],[2006,0.1561,0.0196,0.0252],[2007,0.0548,0.1021,0.0411],[2008,-0.3655,0.201,-0.0002],[2009,0.2594,-0.1112,0.0281],[2010,0.1482,0.0846,0.0144],[2011,0.021,0.1604,0.0306],[2012,0.1589,0.0297,0.0176],[2013,0.3215,-0.091,0.0151],[2014,0.1352,0.1075,0.0065],[2015,0.0138,0.0128,0.0064],[2016,0.1177,0.0069,0.0205],[2017,0.2161,0.028,0.0213],[2018,-0.0423,-0.0002,0.02],[2019,0.3121,0.0964,0.0231],[2020,0.1802,0.1133,0.0132],[2021,0.2847,-0.0442,0.0719],[2022,-0.1804,-0.1783,0.0644],[2023,0.2606,0.0388,0.0312],[2024,0.2488,-0.0164,0.0289],[2025,0.1772,0.078,0.0274]];
+
+  // One path in today's dollars. seq[k] = { r: nominal portfolio return, i: inflation } for year k+1.
+  function runReal(p, seq) {
+    const rows = []; let B = p.bal, w1 = null, startBal = null, depleted = null, total = 0;
+    for (let t = 1; t <= p.yrs; t++) {
+      const { r, i } = seq[t - 1], rr = (1 + r) / (1 + i) - 1, start = B;
+      let w = 0, c = 0;
+      if (t <= p.sw) { c = p.con * 12; B = B * (1 + rr) + c * Math.sqrt(1 + rr); }
+      else {
+        if (w1 === null) { w1 = B * p.rate; startBal = B; }
+        w = p.mode === "fixed" ? w1 : B * p.rate;
+        if (w > B) w = B;
+        B = (B - w) * (1 + rr); if (B < 1) B = 0;
+        if (B === 0 && depleted === null) depleted = t;
+      }
+      total += w; rows.push({ t, start, c, w, end: B });
+    }
+    if (w1 === null) { startBal = B; w1 = B * p.rate; }
+    return { rows, depleted, w1, startBal, total, end: B };
+  }
+
+  function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  function runMany(p) {
+    const s = p.stk, yr = h => ({ r: s * h[1] + (1 - s) * h[2], i: h[3] }), runs = [];
+    if (S.rm === "hist") {
+      const L = HIST.length;
+      if (p.yrs <= L) for (let a = 0; a + p.yrs <= L; a++) runs.push({ label: HIST[a][0], ...runReal(p, HIST.slice(a, a + p.yrs).map(yr)) });
+      else for (let a = 0; a < L; a++) runs.push({ label: HIST[a][0], ...runReal(p, Array.from({ length: p.yrs }, (_, k) => yr(HIST[(a + k) % L]))) });
+    } else {
+      const rnd = mulberry(20261114);
+      for (let k = 0; k < 1000; k++) runs.push({ label: k + 1, ...runReal(p, Array.from({ length: p.yrs }, () => yr(HIST[Math.floor(rnd() * HIST.length)]))) });
+    }
+    return runs;
+  }
+
+  const pct = (arr, q) => { const a = arr.slice().sort((x, y) => x - y); const i = (a.length - 1) * q, lo = Math.floor(i);
+    return a[lo] + (a[Math.min(lo + 1, a.length - 1)] - a[lo]) * (i - lo); };
+
+  function drawFan(agg, worst) {
+    const svg = $("chart");
+    const W = Math.max(300, Math.round(svg.parentElement.clientWidth || 760));
+    const small = W < 520, H = small ? 250 : 360, L = small ? 46 : 64, R = small ? 46 : 64, T = 16, Bm = 34;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.style.setProperty("--fs", small ? "10px" : "11px");
+    const iw = W - L - R, ih = H - T - Bm, n = agg.length;
+    const balMax = niceMax(Math.max(agg[0].start, ...agg.map(a => a.p90), ...(worst ? worst.rows.map(r => r.end) : []), 1));
+    const wTop = 2.5 * Math.max(...agg.map(a => Math.max(a.wMed, a.cMed)), 1), wE = Math.pow(10, Math.floor(Math.log10(wTop)));
+    const wMax = [1, 2, 4, 6, 8, 10].map(m => m * wE).find(v => v >= wTop);
+    const x = i => L + (i + 0.5) * iw / n, xe = i => L + (i + 1) * iw / n, bw = Math.max(2, iw / n * 0.62);
+    const yB = v => T + ih - v / balMax * ih, yW = v => T + ih - v / wMax * ih;
+    let s = "";
+    for (let k = 0; k <= 4; k++) { const y = T + ih - k * ih / 4;
+      s += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+      s += `<text x="${L-8}" y="${y+4}" text-anchor="end">${short(balMax*k/4)}</text>`;
+      s += `<text x="${W-R+8}" y="${y+4}" text-anchor="start" style="fill:var(--draw)">${short(wMax*k/4)}</text>`; }
+    const slots = Math.max(4, Math.floor(iw / 34));
+    const step = [1, 2, 5, 10, 20].find(st => n / st <= slots) || 20;
+    agg.forEach((a, i) => { if (a.t === 1 || a.t % step === 0) s += `<text x="${x(i)}" y="${H-12}" text-anchor="middle">${a.t}</text>`; });
+    s += `<text x="${W-R}" y="${H-0.5}" text-anchor="end" font-size="10">year</text>`;
+    agg.forEach((a, i) => { const v = a.wMed || a.cMed; if (!v) return; const y = yW(v);
+      s += `<rect x="${x(i)-bw/2}" y="${y}" width="${bw}" height="${T+ih-y}" fill="${a.wMed ? "var(--draw)" : "var(--contrib)"}" opacity=".45"/>`; });
+    const up = [[L, yB(agg[0].start)]].concat(agg.map((a, i) => [xe(i), yB(a.p90)]));
+    const dn = [[L, yB(agg[0].start)]].concat(agg.map((a, i) => [xe(i), yB(a.p10)]));
+    const line = pts => pts.map((q, i) => (i ? "L" : "M") + q[0].toFixed(1) + " " + q[1].toFixed(1)).join(" ");
+    s += `<path d="${line(up)} ${dn.slice().reverse().map(q => "L" + q[0].toFixed(1) + " " + q[1].toFixed(1)).join(" ")} Z" fill="var(--balance-fill)" stroke="var(--balance)" stroke-opacity=".35" stroke-width="1"/>`;
+    s += `<path d="${line([[L, yB(agg[0].start)]].concat(agg.map((a, i) => [xe(i), yB(a.p50)])))}" fill="none" stroke="var(--balance)" stroke-width="2.5" stroke-linejoin="round"/>`;
+    if (worst) s += `<path d="${line([[L, yB(worst.rows[0].start)]].concat(worst.rows.map((r, i) => [xe(i), yB(r.end)])))}" fill="none" stroke="var(--warn)" stroke-width="1.8" stroke-dasharray="5 4"/>`;
+    s += `<line id="hov" x1="0" x2="0" y1="${T}" y2="${T+ih}" stroke="var(--muted)" stroke-dasharray="3 3" visibility="hidden"/>`;
+    agg.forEach((a, i) => { s += `<rect data-i="${i}" x="${L + i*iw/n}" y="${T}" width="${iw/n}" height="${ih}" fill="transparent"/>`; });
+    svg.innerHTML = s;
+    svg.querySelectorAll("rect[data-i]").forEach(el => {
+      const show = () => { const i = +el.dataset.i, a = agg[i];
+        const hov = $("hov"); hov.setAttribute("x1", x(i)); hov.setAttribute("x2", x(i)); hov.setAttribute("visibility", "visible");
+        $("readout").innerHTML = `Year <b>${a.t}</b> · median balance <b>${usd0.format(a.p50)}</b> · 10th–90th ${short(a.p10)}–${short(a.p90)}`
+          + (a.wMed ? ` · median withdrawal ${usd0.format(a.wMed)} · still funded <b>${Math.round(a.funded * 100)}%</b>` : ""); };
+      el.addEventListener("mouseenter", show); el.addEventListener("click", show); });
+    svg.addEventListener("mouseleave", () => { const h = $("hov"); if (h) h.setAttribute("visibility", "hidden"); });
+  }
+
+  function renderRandom(p) {
+    const runs = runMany(p), N = runs.length, hist = S.rm === "hist";
+    const agg = [];
+    for (let k = 0; k < p.yrs; k++) {
+      const ends = runs.map(r => r.rows[k].end);
+      const ws = runs.map(r => r.rows[k].w), cs = runs.map(r => r.rows[k].c);
+      agg.push({ t: k + 1, start: runs[0].rows[0].start, p10: pct(ends, .1), p50: pct(ends, .5), p90: pct(ends, .9),
+        wMed: pct(ws, .5), cMed: pct(cs, .5), funded: runs.filter(r => !r.depleted || r.depleted > k + 1).length / N });
+    }
+    const wYears = p.yrs - p.sw, ok = runs.filter(r => !r.depleted).length / N;
+    const w1s = runs.map(r => r.w1), w1m = pct(w1s, .5), rate = (p.rate*100).toFixed(1) + "%";
+    const span = hist ? (p.yrs <= HIST.length ? `${HIST[0][0]}–${HIST[HIST.length - p.yrs][0]}` : `${HIST[0][0]}–${HIST[HIST.length-1][0]}, wrapping around`) : "";
+    const worst = runs.slice().sort((a, b) => (a.depleted || 1e9) - (b.depleted || 1e9) || a.end - b.end)[0];
+
+    $("nowLbl").textContent = p.sw === 0 ? "Withdrawal value right now" : `First withdrawal, year ${p.sw + 1} (today's dollars, median)`;
+    $("nowYear").textContent = usd0.format(w1m) + " / yr";
+    const how = hist ? `${N} historical starting years (${span})` : `${N.toLocaleString("en-US")} random market sequences`;
+    $("nowLine").textContent = (p.sw > 0 ? `Range ${usd0.format(pct(w1s, .1))}–${usd0.format(pct(w1s, .9))} (10th–90th percentile). ` : `${rate} of ${usd0.format(p.bal)} is ${usd0.format(w1m/12)} a month. `)
+      + (wYears > 0 ? `Across ${how}, the money lasted all ${wYears} withdrawal years in ${Math.round(ok * 100)}% of them.` : `Across ${how}.`);
+
+    const endsAll = runs.map(r => r.end);
+    $("sStartLbl").textContent = wYears > 0 ? `Lasts all ${wYears} yrs` : "Lasts";
+    $("sStart").textContent = wYears > 0 ? Math.round(ok * 100) + "%" : "—";
+    $("sStart").parentElement.classList.toggle("bad", wYears > 0 && ok < 0.85);
+    $("sStart").parentElement.classList.toggle("good", wYears > 0 && ok >= 0.95);
+    $("sTotalLbl").textContent = `Median after year ${p.yrs}`;
+    $("sTotal").textContent = short(pct(endsAll, .5));
+    $("sEndLbl").textContent = `Bad case (10th pct)`;
+    $("sEnd").textContent = short(pct(endsAll, .1));
+    $("sEnd").parentElement.classList.toggle("bad", pct(endsAll, .1) === 0);
+    $("sRunLbl").textContent = hist ? `Worst start: ${worst.label}` : "Ran out";
+    $("sRun").textContent = hist ? (worst.depleted ? `out in yr ${worst.depleted}` : `ends ${short(worst.end)}`) : `${Math.round((1 - ok) * 100)}% of runs`;
+    $("sRunBox").classList.toggle("bad", hist ? !!worst.depleted : ok < 0.85);
+    $("keyWorst").hidden = !hist;
+    $("keyWorstTxt").textContent = `Worst start (${worst.label})`;
+    $("mbar").innerHTML = `<span><b>${usd0.format(w1m)}</b>/yr${p.sw ? ` from yr ${p.sw + 1}` : ""}</span>`
+      + `<span class="${ok < 0.85 ? "bad" : ""}">${wYears > 0 ? Math.round(ok * 100) + "% last" : ""}</span>`;
+
+    drawFan(agg, hist ? worst : null);
+    $("readout").textContent = "Hover or tap a year for details.";
+
+    let h;
+    if (hist) {
+      h = `<thead><tr><th>Start year</th><th>First withdrawal</th><th>Total withdrawn</th><th>Balance after yr ${p.yrs}</th><th>Ran out</th></tr></thead><tbody>`;
+      runs.forEach(r => { h += `<tr><td>${r.label}</td><td>${usd0.format(r.w1)}</td><td>${usd0.format(r.total)}</td><td>${usd0.format(r.end)}</td><td>${r.depleted ? "year " + r.depleted : "—"}</td></tr>`; });
+    } else {
+      h = `<thead><tr><th>Year</th><th>10th pct</th><th>Median</th><th>90th pct</th><th>Median withdrawal</th><th>Still funded</th></tr></thead><tbody>`;
+      agg.forEach(a => { h += `<tr><td>${a.t}</td><td>${usd0.format(a.p10)}</td><td>${usd0.format(a.p50)}</td><td>${usd0.format(a.p90)}</td><td>${usd0.format(a.wMed)}</td><td>${Math.round(a.funded * 100)}%</td></tr>`; });
+    }
+    $("tbl").innerHTML = h + "</tbody>";
+  }
+
   function render() {
     const p = read(); const real = S.basis === "real";
     $("sw").max = p.yrs;
@@ -386,6 +546,17 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
       ? "Classic “4% rule” style: steady income that keeps pace with prices; the balance absorbs the swings."
       : "Income rises and falls with the balance, so the money never fully runs out.";
     $("keyCon").hidden = !(p.con > 0 && p.sw > 0);
+    const rnd = S.rm !== "steady";
+    for (const [id, m] of [["rmSteady","steady"],["rmHist","hist"],["rmMC","mc"]]) $(id).setAttribute("aria-pressed", S.rm === m);
+    $("rmHint").textContent = S.rm === "steady" ? "The same return every year."
+      : S.rm === "hist" ? "Replays every stretch of actual market years since 1928."
+      : "1,000 random orderings of actual market years since 1928.";
+    $("stkOut").textContent = $("stk").value + "% stocks";
+    $("stkCtl").hidden = !rnd; $("retCtl").hidden = rnd; $("infCtl").hidden = rnd; $("basisCtl").hidden = rnd;
+    $("legSteady").hidden = rnd; $("legRand").hidden = !rnd; $("footSteady").hidden = rnd; $("footRand").hidden = !rnd;
+    if (rnd) { renderRandom(p); save(); return; }
+    $("sTotalLbl").textContent = "Total withdrawn"; $("sRunLbl").textContent = "Money lasts";
+    $("sStart").parentElement.classList.remove("bad", "good");
 
     const { rows, depleted, w1, startBal } = simulate(p);
     const dS = Math.pow(1 + p.inf, p.sw);
@@ -428,7 +599,11 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
       h += `<tr><td>${r.t}</td><td>${usd0.format(r.start/d)}</td>${showC ? `<td>${usd0.format(r.c/d)}</td>` : ""}<td>${usd0.format(r.w/d)}</td><td>${usd0.format(r.w/d/12)}</td><td>${usd0.format(e)}</td></tr>`; });
     $("tbl").innerHTML = h + "</tbody>";
 
-    try { const o = { mode: S.mode, basis: S.basis }; for (const k of FIELDS) o[k] = $(k).value;
+    save();
+  }
+
+  function save() {
+    try { const o = { mode: S.mode, basis: S.basis, rm: S.rm }; for (const k of FIELDS) o[k] = $(k).value;
       localStorage.setItem(KEY, JSON.stringify(o)); } catch (e) {}
   }
 
@@ -445,7 +620,10 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
   }
 
   pair("bal"); pair("con");
-  ["sw","rate","ret","inf","yrs"].forEach(id => $(id).addEventListener("input", render));
+  ["sw","rate","ret","inf","yrs","stk"].forEach(id => $(id).addEventListener("input", render));
+  $("rmSteady").onclick = () => { S.rm = "steady"; render(); };
+  $("rmHist").onclick = () => { S.rm = "hist"; render(); };
+  $("rmMC").onclick = () => { S.rm = "mc"; render(); };
   $("modeFixed").onclick = () => { S.mode = "fixed"; render(); };
   $("modePct").onclick = () => { S.mode = "pct"; render(); };
   $("basisNom").onclick = () => { S.basis = "nom"; render(); };
