@@ -12,11 +12,12 @@ Live: https://prmichaelsen.github.io/drawdown-planner/
 
 Two withdrawal modes:
 
-- **Year-1 amount, raised with inflation** (the "4% rule" style).
+- **First-year amount, raised with inflation** (the "4% rule" style).
 - **Same % of each year's balance.**
 
-Assumes a constant return, withdrawals at the start of each year, and
-no taxes or fees. An estimate, not financial advice.
+Assumes a constant return, monthly investments compounding monthly,
+withdrawals at the start of each year, and no taxes or fees. An
+estimate, not financial advice.
 
 No build step: `index.html` is the whole app.
 
