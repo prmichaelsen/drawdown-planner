@@ -106,13 +106,14 @@ details summary { cursor: pointer; font-weight: 600; }
 .site-foot a { color: var(--muted); text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 .site-foot a:hover, .site-foot a:focus-visible { color: var(--balance); text-decoration: underline; }
 .site-foot svg { width: 15px; height: 15px; min-width: 0; fill: currentColor; }
-dialog.bmc { width: min(420px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+dialog.bmc { width: min(420px, calc(100vw - 16px)); max-width: none; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); margin: auto; padding: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
 dialog.bmc::backdrop { background: rgba(5, 20, 35, .55); }
-.bmc-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
-.bmc-head button { font: 600 1.2rem/1 var(--font-body); color: var(--muted); background: none; border: 0; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
-.bmc-head button:hover { color: var(--ink); background: var(--bg); }
-dialog.bmc iframe { display: block; width: 100%; height: min(620px, calc(100vh - 140px)); border: 0; background: #fff; }
-.bmc-alt { padding: 8px 16px 12px; font-size: .8rem; color: var(--muted); }
+dialog.bmc[open] { display: flex; flex-direction: column; }
+.bmc-head { flex: none; display: flex; justify-content: space-between; align-items: center; padding: 10px 12px 10px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+.bmc-head button { display: grid; place-items: center; width: 38px; height: 38px; font: 500 1.7rem/1 var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); cursor: pointer; padding: 0; border-radius: 50%; }
+.bmc-head button:hover { background: var(--line); }
+dialog.bmc iframe { display: block; flex: 1 1 auto; min-height: 0; width: 100%; height: 640px; border: 0; background: #fff; }
+.bmc-alt { flex: none; padding: 8px 16px 12px; font-size: .8rem; color: var(--muted); }
 .bmc-alt a { color: var(--balance); }
 
 .table-box { overflow-x: auto; margin-top: 10px; }
