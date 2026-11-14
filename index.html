@@ -61,6 +61,8 @@ input:focus-visible, button:focus-visible { outline: 2px solid var(--balance); o
 .seg button[aria-pressed="true"] { background: var(--balance); color: var(--surface); }
 
 .main { display: grid; gap: 20px; min-width: 0; }
+.main > * { min-width: 0; max-width: 100%; }
+.table-box { max-width: 100%; -webkit-overflow-scrolling: touch; }
 .now { display: grid; gap: 4px; }
 .eyebrow { text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; font-weight: 600; color: var(--muted); }
 .big { font: 600 clamp(1.9rem, 5vw, 2.6rem)/1.1 var(--font-data); font-variant-numeric: tabular-nums; color: var(--draw); }
