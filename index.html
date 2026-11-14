@@ -8,29 +8,29 @@
 <title>Index Fund Drawdown</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap">
 <style>
 /* Layout: control rail on the left, readout + chart on the right; stacks to one column on phones. */
 :root {
-  --bg: #f3f5f2;
+  --bg: #f1f6f9;
   --surface: #ffffff;
-  --ink: #15302b;
-  --muted: #5d6f6a;
-  --line: #d6ddd9;
-  --balance: #1f6f5c;
-  --balance-fill: rgba(31,111,92,.12);
-  --draw: #c08a1e;
-  --warn: #b5432f;
+  --ink: #0f2436;
+  --muted: #577085;
+  --line: #d3dee7;
+  --balance: #1f5fb8;
+  --balance-fill: rgba(31,95,184,.12);
+  --draw: #0a8aa6;
+  --warn: #c23b3b;
   --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-data: var(--font-body);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0f1716; --surface: #16211f; --ink: #e3ece9; --muted: #92a6a0; --line: #2a3a37;
-  --balance: #5cc3a6; --balance-fill: rgba(92,195,166,.14); --draw: #e3b04b; --warn: #ef7c66;
+  --bg: #0b1520; --surface: #111e2c; --ink: #e2edf5; --muted: #8ea6b9; --line: #23364a;
+  --balance: #6aa8ff; --balance-fill: rgba(106,168,255,.15); --draw: #3cc8e2; --warn: #f07a7a;
   color-scheme: dark } }
 :root[data-theme="dark"] {
-  --bg: #0f1716; --surface: #16211f; --ink: #e3ece9; --muted: #92a6a0; --line: #2a3a37;
-  --balance: #5cc3a6; --balance-fill: rgba(92,195,166,.14); --draw: #e3b04b; --warn: #ef7c66;
+  --bg: #0b1520; --surface: #111e2c; --ink: #e2edf5; --muted: #8ea6b9; --line: #23364a;
+  --balance: #6aa8ff; --balance-fill: rgba(106,168,255,.15); --draw: #3cc8e2; --warn: #f07a7a;
   color-scheme: dark }
 
 body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
@@ -48,10 +48,10 @@ h1 { font-size: 1.7rem; font-weight: 700; letter-spacing: -.01em; margin: 0; tex
 .ctl { display: grid; gap: 6px; }
 .ctl-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .ctl label { font-weight: 600; font-size: .9rem; }
-.ctl output, .ctl .val { font-family: var(--font-data); font-size: .88rem; font-variant-numeric: tabular-nums; }
+.ctl output, .ctl .val { font-family: var(--font-data); font-size: .92rem; font-weight: 600; color: var(--balance); font-variant-numeric: tabular-nums; }
 .hint { color: var(--muted); font-size: .8rem; }
 input[type=range] { width: 100%; accent-color: var(--balance); }
-input[type=number] { width: 100%; box-sizing: border-box; font: 500 1rem var(--font-data); color: var(--ink);
+input.money { width: 100%; box-sizing: border-box; font: 500 1rem var(--font-data); color: var(--ink);
   background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
 input:focus-visible, button:focus-visible { outline: 2px solid var(--balance); outline-offset: 2px; }
 .seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
@@ -91,7 +91,6 @@ input[type=range] { height: 28px; }
   .mbar b { color: var(--draw); font-size: 1.05rem; }
   .mbar .bad { color: var(--warn); }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
-  .main { order: -1; }
   h1 { font-size: 1.4rem; }
   .panel { padding: 14px; }
   .legend { flex-direction: column; gap: 4px; }
@@ -123,7 +122,7 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     <aside class="panel controls" aria-label="Assumptions">
       <div class="ctl">
         <div class="ctl-head"><label for="bal">Portfolio today</label></div>
-        <input id="bal" type="number" min="0" step="50000" value="2500000">
+        <input id="bal" class="money" type="text" inputmode="numeric" autocomplete="off" value="2,500,000">
       </div>
 
       <div class="ctl">
@@ -211,6 +210,9 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
     if (s) { for (const k of ["bal","rate","ret","inf","yrs"]) if (s[k] != null) $(k).value = s[k];
       if (s.mode) S.mode = s.mode; if (s.basis) S.basis = s.basis; } } catch (e) {}
 
+  function digits(v) { return +String(v).replace(/\D/g, "") || 0; }
+  function commas(v) { const d = String(v).replace(/\D/g, "").replace(/^0+(?=\d)/, ""); return d ? (+d).toLocaleString("en-US") : ""; }
+  $("bal").value = commas($("bal").value);
   const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
   const short = v => { const a = Math.abs(v);
     if (a >= 1e9) return "$" + (v/1e9).toFixed(a >= 1e10 ? 0 : 1) + "B";
@@ -234,7 +236,7 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
   }
 
   function read() {
-    return { bal: Math.max(0, +$("bal").value || 0), rate: +$("rate").value / 100, ret: +$("ret").value / 100,
+    return { bal: digits($("bal").value), rate: +$("rate").value / 100, ret: +$("ret").value / 100,
       inf: +$("inf").value / 100, yrs: +$("yrs").value, mode: S.mode };
   }
 
@@ -328,7 +330,15 @@ th { color: var(--muted); font-weight: 600; font-family: var(--font-body); }
       inf: $("inf").value, yrs: $("yrs").value, mode: S.mode, basis: S.basis })); } catch (e) {}
   }
 
-  ["bal","rate","ret","inf","yrs"].forEach(id => $(id).addEventListener("input", render));
+  ["rate","ret","inf","yrs"].forEach(id => $(id).addEventListener("input", render));
+  $("bal").addEventListener("input", e => {
+    const el = e.target, caret = el.selectionStart ?? el.value.length;
+    const before = el.value.slice(0, caret).replace(/\D/g, "").length;
+    el.value = commas(el.value);
+    let pos = 0, seen = 0;
+    while (pos < el.value.length && seen < before) { if (/\d/.test(el.value[pos])) seen++; pos++; }
+    try { el.setSelectionRange(pos, pos); } catch (err) {}
+    render(); });
   $("modeFixed").onclick = () => { S.mode = "fixed"; render(); };
   $("modePct").onclick = () => { S.mode = "pct"; render(); };
   $("basisNom").onclick = () => { S.basis = "nom"; render(); };
